@@ -196,7 +196,7 @@ lock_acquire(struct lock *lock)
         // Write this
         KASSERT(!lock_do_i_hold(lock));
         KASSERT(lock != NULL);
-        spin_acquire(&lock->lk_spin);
+        spinlock_acquire(&lock->lk_spin);
         while(locke->lk_owner) {
                 wchan_lock(lock->lk_wchan);
                 spinlock_release(&(lock->lk_spin));
