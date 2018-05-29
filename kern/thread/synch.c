@@ -197,7 +197,7 @@ lock_acquire(struct lock *lock)
         KASSERT(!lock_do_i_hold(lock));
         KASSERT(lock != NULL);
         spinlock_acquire(&lock->lk_spin);
-        while(locke->lk_owner) {
+        while(lock->lk_owner) {
                 wchan_lock(lock->lk_wchan);
                 spinlock_release(&(lock->lk_spin));
                 wchan_sleep(lock->lk_wchan);
@@ -205,7 +205,7 @@ lock_acquire(struct lock *lock)
         }
         lock->lk_owner = curthread;
         //lock->lk_held is identical to lk_owner, if theres a owner, it is being held. discard.
-        spinlock_release(lock->lk_spin);
+        spinlock_release(&(lock->lk_spin));
 
         //(void)lock;  // suppress warning until code gets written
 }
