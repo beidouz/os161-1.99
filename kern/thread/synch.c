@@ -228,10 +228,10 @@ bool
 lock_do_i_hold(struct lock *lock)
 {
         // Write this
+        KASSERT(lock != NULL);
+        //(void)lock;  // suppress warning until code gets written
 
-        (void)lock;  // suppress warning until code gets written
-
-        return true; // dummy until code gets written
+        return (lock->lk_owner == curthread);
 }
 
 ////////////////////////////////////////////////////////////
