@@ -308,8 +308,8 @@ void
 cv_broadcast(struct cv *cv, struct lock *lock)
 {
 	// Write this
-        ASSERT(cv != NULL);
-        ASSERT(lock_do_i_hold(lock));
+        KASSERT(cv != NULL);
+        KASSERT(lock_do_i_hold(lock));
         wchan_wakeall(cv->cv_wchan);
 	// (void)cv;    // suppress warning until code gets written
 	// (void)lock;  // suppress warning until code gets written
