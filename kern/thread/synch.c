@@ -260,7 +260,7 @@ cv_create(const char *name)
         if (cv->cv_wchan == NULL) {
                 kfree(cv->cv_name);
                 kfree(cv);
-                return NULL:
+                return NULL;
         }
 
         return cv;
@@ -297,8 +297,8 @@ void
 cv_signal(struct cv *cv, struct lock *lock)
 {
         // Write this
-        ASSERT(cv != NULL);
-        ASSERT(lock_do_i_hold(lock));
+        KASSERT(cv != NULL);
+        KASSERT(lock_do_i_hold(lock));
         wchan_wakeone(cv->cv_wchan);
 	// (void)cv;    // suppress warning until code gets written
 	// (void)lock;  // suppress warning until code gets written
