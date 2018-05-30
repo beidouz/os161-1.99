@@ -281,8 +281,16 @@ void
 cv_wait(struct cv *cv, struct lock *lock)
 {
         // Write this
-        (void)cv;    // suppress warning until code gets written
-        (void)lock;  // suppress warning until code gets written
+        KASSERT(cv != NULL);
+        KASSERT(lock != NULL);
+        KASSERT(lock_do_i_hold(lock));
+        wchan_lock(cv->cv_wchan); //lock the wait channel of cv
+        lock_release(lock); //now its safe to go to sleep
+        wchan_sleep(cv->cv_wchan); // go to sleep
+        //wake up
+        lock_acquire(lock);
+        // (void)cv;    // suppress warning until code gets written
+        // (void)lock;  // suppress warning until code gets written
 }
 
 void
