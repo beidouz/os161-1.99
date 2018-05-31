@@ -69,7 +69,7 @@ safety_check(vehicle *cur_v)
 
   //check the current car with every single car in the intersection see if there is a possible
   // v_array contains the cars that are currently in the intersection
-  for (int i = 0; i < array_num(v_array); ++i) {
+  for (unsigned int i = 0; i < array_num(v_array); ++i) {
     vehicle *av_x = array_get(v_array, i); //car x in the intersection, x=1,2,3,,,n
 
     if (av_x == NULL) {
@@ -81,7 +81,7 @@ safety_check(vehicle *cur_v)
     } else if ((cur_v->origin == av_x->destination) && (cur_v->destination == av_x->origin)) {
       //if two cars are going opposite direction -> safe
       continue;
-    } else if (((cur_v->destination != av_x->destination) && (right_turn(cur_v) || right_turn(av_x))) {
+    } else if ((cur_v->destination != av_x->destination) && (right_turn(cur_v) || right_turn(av_x))) {
       // if two cars have different destinations and at least 1 car is turning right -> safe
       continue;
     } else {
