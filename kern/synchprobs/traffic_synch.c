@@ -22,7 +22,7 @@
 /*
  * replace this with declarations of any synchronization and other variables you need here
  */
-static struct semaphore *intersectionSem;
+//static struct semaphore *intersectionSem;
 
 static struct cv *cv_north;
 static struct cv *cv_south;
