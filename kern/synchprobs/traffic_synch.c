@@ -3,6 +3,7 @@
 #include <synchprobs.h>
 #include <synch.h>
 #include <opt-A1.h>
+#include <array.h>
 
 /* 
  * This simple default synchronization mechanism allows only vehicle at a time
@@ -222,8 +223,8 @@ void
 intersection_after_exit(Direction origin, Direction destination) 
 {
   /* replace this default implementation with your own implementation */
-  // (void)origin;  /* avoid compiler complaint about unused parameter */
-  // (void)destination; /* avoid compiler complaint about unused parameter */
+  (void)origin;  /* avoid compiler complaint about unused parameter */
+  (void)destination; /* avoid compiler complaint about unused parameter */
   // KASSERT(intersectionSem != NULL);
   // V(intersectionSem);
   KASSERT(intersection_lock != NULL);
