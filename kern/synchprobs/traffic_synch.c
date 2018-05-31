@@ -241,5 +241,11 @@ intersection_after_exit(Direction origin, Direction destination)
     temp = 0;
   }
   cv_broadcast(cv_array[temp], intersection_lock);
+  for (unsigned int i = 0; i < array_num(v_array); ++i) {
+    vehicle *temp_v = array_get(v_array, i);
+    if ((temp_v->origin == origin) && (temp_v->destination == destination)) {
+      array_remove(v_array, i);
+    }
+  }
   lock_release(intersection_lock);
 }
