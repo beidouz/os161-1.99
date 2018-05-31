@@ -84,12 +84,12 @@ safety_check(vehicle *cur_v)
     } else if ((cur_v->destination != av_x->destination) && (right_turn(cur_v) || right_turn(av_x))) {
       // if two cars have different destinations and at least 1 car is turning right -> safe
       continue;
-    } else {
-      // if non of the above is true -> not safe
-      return false;
     }
-  return true;
+    // if non of the above is true -> not safe
+    return false;
   }
+
+  return true;
 }
 
 
@@ -162,7 +162,7 @@ intersection_sync_cleanup(void)
   cv_destroy(cv_east);
   cv_destroy(cv_south);
   cv_destroy(cv_west);
-  array_destroy(cv_array);
+  array_destroy(v_array);
 }
 
 
@@ -204,7 +204,7 @@ intersection_before_entry(Direction origin, Direction destination)
   //exit the wait channel
   lock_release(intersection_lock);
   array_add(v_array, new_v, NULL);
-  car_count += 1;
+  car_count[origin] += 1;
 }
 
 
@@ -233,7 +233,7 @@ intersection_after_exit(Direction origin, Direction destination)
   KASSERT(cv_south != NULL);
   KASSERT(cv_west != NULL);
 
-  car_count -= 1;
+  car_count[origin] -= 1;
   int temp = 0;
   if (temp < 3) {
     temp += 1;
