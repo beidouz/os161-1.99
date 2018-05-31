@@ -233,7 +233,6 @@ intersection_after_exit(Direction origin, Direction destination)
   KASSERT(cv_south != NULL);
   KASSERT(cv_west != NULL);
 
-  lock_acquire(intersection_lock);
   car_count[origin] -= 1;
   int temp = 0;
   if (temp < 3) {
