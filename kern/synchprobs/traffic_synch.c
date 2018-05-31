@@ -240,6 +240,7 @@ intersection_after_exit(Direction origin, Direction destination)
   } else {
     temp = 0;
   }
+  lock_acquire(intersection_lock);
   cv_broadcast(cv_array[temp], intersection_lock);
   lock_release(intersection_lock);
 }
