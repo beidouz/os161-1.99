@@ -38,6 +38,7 @@
 
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
+#include <array.h>
 
 struct addrspace;
 struct vnode;
@@ -50,6 +51,12 @@ struct semaphore;
  */
 struct proc {
 	char *p_name;			/* Name of this process */
+
+	pid_t pid;
+	struct proc *parent; 
+	int exitcode;             //if exited->exitcode; if running-> -1
+	struct array *children_pids;   //an array of children pids
+
 	struct spinlock p_lock;		/* Lock for this structure */
 	struct threadarray p_threads;	/* Threads in this process */
 
@@ -71,6 +78,16 @@ struct proc {
 	/* add more material here as needed */
 };
 
+
+/*
+ * structure to manage processes, manage PIDs (reusing PIDs)
+ */
+ struct proc_manager {
+	 struct proc * procs[PID_MAX + 1];
+	 int last_pid;    // the most recent pid that was assigned; avoid looping from PID_MIN
+ }
+
+
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
 
@@ -84,6 +101,9 @@ void proc_bootstrap(void);
 
 /* Create a fresh process for use by runprogram(). */
 struct proc *proc_create_runprogram(const char *name);
+
+// get and return a pid for the process
+int generate_pid(struct proc * proc);
 
 /* Destroy a process. */
 void proc_destroy(struct proc *proc);

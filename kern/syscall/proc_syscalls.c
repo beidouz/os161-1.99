@@ -9,6 +9,10 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
+#include <limits.h>
+
+
+static volatile pid_t pid_counter = PID_MIN;
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -90,5 +94,59 @@ sys_waitpid(pid_t pid,
   }
   *retval = pid;
   return(0);
+}
+
+
+int sys_fork(struct trapframe *tf, pid_t *ret_val) {
+
+  //CREATE process structure for child process
+  struct proc *child_proc = proc_create_runprogram(cur_proc->p_name); // create the process structure
+  //check if child process is created
+  if (child_proc == NULL) return ENOMEM;
+  
+  //CREATE and copy address space (and data) from parent to child, give address space to new proc
+  int as_copy_err = as_copy(curproc_getas(), &(child_proc->p_addrspace));
+  //check if address space is copied successfully
+  if(as_copy_err) {
+    proc_destory(child_proc);
+  }
+  
+  //Assign PID to child process
+  int temp_pid = generate_pid(child_proc);
+  if (temp_pid == -1) {
+    as_destroy(child_proc->p_addrspace);
+    proc_destroy(child_proc);
+    return ENPROC;
+  }
+  child_proc->pid = temp_pid;
+
+  //CREATE the parent & child relationship
+  child_proc->parent = curproc;
+  array_add(cur_proc->children_pids, child_proc->pid); //add child pid to array of all children pids
+
+  //CREATE trapframe 
+  struct trapframe *new_tf = kmalloc(sizeof(struct trapframe));
+  if (new_tf == NULL) {
+    as_destroy(child_proc->p_addrspace);
+    proc_destroy(child_proc);
+    return ENOMEM;
+  }
+  memcpy(new_tf, tf, sizeof(struct trapframe));
+
+  //CREATE thread for child process
+  int thread_fork_err = thread_fork(curthread->t_name, child_proc, &enter_forked_process, new_tf, 1);
+  if (thread_fork_err) {
+    as_destroy(child_proc->p_addrspace);
+    proc_destroy(child_proc);
+    return thread_fork_err;
+  }
+
+  if (curproc->pid == child_proc->pid) { //if curproc is the child
+    *ret_val = 0;
+  } else {
+    *ret_val = child_proc->pid;
+  }
+
+  return 0;
 }
 

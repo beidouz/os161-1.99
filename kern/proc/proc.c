@@ -51,10 +51,15 @@
 #include <synch.h>
 #include <kern/fcntl.h>  
 
-/*
- * The process for the kernel; this holds all the kernel-only threads.
- */
+
+// The process for the kernel; this holds all the kernel-only threads.
 struct proc *kproc;
+
+// The proc manager that contains array of all processes
+proc_manager * processes;
+
+// The lock for processes
+struct lock * proc_lock;
 
 /*
  * Mechanism for making the kernel menu thread sleep while processes are running
@@ -105,6 +110,33 @@ proc_create(const char *name)
 
 	return proc;
 }
+
+/*
+ * Assign a unique PID to a process
+ */
+int generate_pid(struct proc *proc) {
+	lock_acquire(proc_lock);
+
+	for (int i = processes->last_pid; i <= PID_MAX; ++i) {
+		if (processes->procs[i] == 0) { //if ith proc doesn't yet exist
+			proc->pid = i;-
+			processes->procs[i] = proc;
+			lock_release(proc_lock);
+			return i;
+		}
+		if (i == PID_MAX) {
+			i = PID_MIN - 1;
+			continue;
+		}
+		if (i == processes->last_pid) {
+			lock_release(proc_lock);
+			return -1;
+		}
+	}
+	lock_release(proc_lock);
+	return -1;
+}
+
 
 /*
  * Destroy a proc structure.
