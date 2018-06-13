@@ -208,7 +208,7 @@ proc_destroy(struct proc *proc)
 	spinlock_cleanup(&proc->p_lock);
 
 	lock_acquire(proc_lock);
-	processes->children_pids[proc->pid] = NULL;  //mark the pid to available
+	processes->procs[proc->pid] = NULL;  //mark the pid to available
 	lock_release(proc_lock);
 
 	kfree(proc->p_name);
