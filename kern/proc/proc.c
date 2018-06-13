@@ -243,10 +243,10 @@ proc_bootstrap(void)
   int processes_size = PID_MAX + 1;
   for (int i = 0; i < processes_size; i++)
   {
-    processes->pids[i] = NULL;
+    processes->procs[i] = NULL;
   }
 
-  proclock = lock_create("proc_lock");
+  proc_lock = lock_create("proc_lock");
   if (!(proc_lock)) panic("Process manager lock could not be created!\n");
 
 #endif // UW 
