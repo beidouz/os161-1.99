@@ -56,7 +56,8 @@
 struct proc *kproc;
 
 // The proc manager that contains array of all processes
-struct proc_manager * processes;
+struct proc_manager pmanager;
+struct proc_manager * processes = &pmanager;
 
 // The lock for processes
 struct lock * proc_lock;
