@@ -252,6 +252,7 @@ proc_bootstrap(void)
   if (no_proc_sem == NULL) {
     panic("could not create no_proc_sem semaphore\n");
   }
+#endif // UW 
 
   int processes_size = PID_MAX + 1;
   for (int i = 0; i < processes_size; i++)
@@ -261,8 +262,6 @@ proc_bootstrap(void)
 
   proc_lock = lock_create("proc_lock");
   if (!(proc_lock)) panic("Process manager lock could not be created!\n");
-
-#endif // UW 
 }
 
 /*
