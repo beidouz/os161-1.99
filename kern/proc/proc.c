@@ -95,6 +95,15 @@ proc_create(const char *name)
 		return NULL;
 	}
 
+	proc->pid = 0;
+	proc->parent = NULL;
+	proc->exitcode = -1;
+	proc->children_pids = array_create();
+	if (!(proc->children_pids)) {
+		kfree(proc);
+		return NULL;
+	}
+
 	threadarray_init(&proc->p_threads);
 	spinlock_init(&proc->p_lock);
 
