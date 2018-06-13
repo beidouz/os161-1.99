@@ -39,6 +39,7 @@
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
 #include <array.h>
+#include <limits.h>
 
 struct addrspace;
 struct vnode;
@@ -85,7 +86,7 @@ struct proc {
  struct proc_manager {
 	 struct proc * procs[PID_MAX + 1];
 	 int last_pid;    // the most recent pid that was assigned; avoid looping from PID_MIN
- }
+ };
 
 
 /* This is the process structure for the kernel and for kernel-only threads. */

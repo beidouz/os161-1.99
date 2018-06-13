@@ -56,7 +56,7 @@
 struct proc *kproc;
 
 // The proc manager that contains array of all processes
-proc_manager * processes;
+struct proc_manager * processes;
 
 // The lock for processes
 struct lock * proc_lock;
@@ -119,7 +119,7 @@ int generate_pid(struct proc *proc) {
 
 	for (int i = processes->last_pid; i <= PID_MAX; ++i) {
 		if (processes->procs[i] == 0) { //if ith proc doesn't yet exist
-			proc->pid = i;-
+			proc->pid = i;
 			processes->procs[i] = proc;
 			lock_release(proc_lock);
 			return i;

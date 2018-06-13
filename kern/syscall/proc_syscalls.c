@@ -10,6 +10,7 @@
 #include <addrspace.h>
 #include <copyinout.h>
 #include <limits.h>
+#include <mips/trapframe.h>
 
 
 static volatile pid_t pid_counter = PID_MIN;
@@ -100,7 +101,7 @@ sys_waitpid(pid_t pid,
 int sys_fork(struct trapframe *tf, pid_t *ret_val) {
 
   //CREATE process structure for child process
-  struct proc *child_proc = proc_create_runprogram(cur_proc->p_name); // create the process structure
+  struct proc *child_proc = proc_create_runprogram(curproc->p_name); // create the process structure
   //check if child process is created
   if (child_proc == NULL) return ENOMEM;
   
@@ -108,7 +109,7 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
   int as_copy_err = as_copy(curproc_getas(), &(child_proc->p_addrspace));
   //check if address space is copied successfully
   if(as_copy_err) {
-    proc_destory(child_proc);
+    proc_destroy(child_proc);
   }
   
   //Assign PID to child process
@@ -122,7 +123,7 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
 
   //CREATE the parent & child relationship
   child_proc->parent = curproc;
-  array_add(cur_proc->children_pids, child_proc->pid); //add child pid to array of all children pids
+  array_add(curproc->children_pids, &(child_proc->pid), NULL); //add child pid to array of all children pids
 
   //CREATE trapframe 
   struct trapframe *new_tf = kmalloc(sizeof(struct trapframe));
@@ -134,7 +135,7 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
   memcpy(new_tf, tf, sizeof(struct trapframe));
 
   //CREATE thread for child process
-  int thread_fork_err = thread_fork(curthread->t_name, child_proc, &enter_forked_process, new_tf, 1);
+  int thread_fork_err = thread_fork(curthread->t_name, child_proc, enter_forked_process, new_tf, 0);
   if (thread_fork_err) {
     as_destroy(child_proc->p_addrspace);
     proc_destroy(child_proc);
