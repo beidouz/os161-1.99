@@ -95,7 +95,7 @@ proc_create(const char *name)
 		return NULL;
 	}
 
-	proc->pid = 0;
+	proc->pid = -1;
 	proc->parent = NULL;
 	proc->exitcode = -1;
 	proc->children_pids = array_create();
@@ -206,6 +206,10 @@ proc_destroy(struct proc *proc)
 
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
+
+	lock_acquire(proc_lock);
+	processes->children_pids[proc->pid] = NULL;  //mark the pid to available
+	lock_release(proc_lock);
 
 	kfree(proc->p_name);
 	kfree(proc);
