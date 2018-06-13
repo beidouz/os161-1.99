@@ -132,10 +132,11 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
     proc_destroy(child_proc);
     return ENOMEM;
   }
-  memcpy(new_tf, tf, sizeof(struct trapframe));
+  // memcpy(new_tf, tf, sizeof(struct trapframe));
+  *new_tf = *tf;
 
   //CREATE thread for child process
-  int thread_fork_err = thread_fork(curthread->t_name, child_proc, enter_forked_process, new_tf, 0);
+  int thread_fork_err = thread_fork("child_proc", child_proc, enter_forked_process, new_tf, 0);
   if (thread_fork_err) {
     as_destroy(child_proc->p_addrspace);
     proc_destroy(child_proc);
