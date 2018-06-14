@@ -56,12 +56,13 @@ void sys__exit(int exitcode) {
 
 /* stub handler for getpid() system call                */
 int
-sys_getpid(pid_t *retval)
+sys_getpid(pid_t *ret_val)
 {
   /* for now, this is just a stub that always returns a PID of 1 */
   /* you need to fix this to make it work properly */
-  *retval = 1;
-  return(0);
+  if (!curproc) return 1;
+  *ret_val = curproc->pid;
+  return 0;
 }
 
 /* stub handler for waitpid() system call                */
@@ -77,7 +78,7 @@ sys_waitpid(pid_t pid,
 
   /* this is just a stub implementation that always reports an
      exit status of 0, regardless of the actual exit status of
-     the specified process.   
+     the specified process.
      In fact, this will return 0 even if the specified process
      is still running, and even if it never existed in the first place.
 
@@ -125,7 +126,7 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
   child_proc->parent = curproc;
   array_add(curproc->children_pids, &(child_proc->pid), NULL); //add child pid to array of all children pids
 
-  //CREATE trapframe 
+  //CREATE trapframe
   struct trapframe *new_tf = kmalloc(sizeof(struct trapframe));
   if (new_tf == NULL) {
     as_destroy(child_proc->p_addrspace);
@@ -138,12 +139,12 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
   //CREATE thread for child process
   int thread_fork_err = thread_fork("child_proc", child_proc, enter_forked_process, new_tf, 0);
   if (thread_fork_err) {
-    as_destroy(child_proc->p_addrspace);
-    proc_destroy(child_proc);
+    // as_destroy(child_proc->p_addrspace);
+    // proc_destroy(child_proc);
     return thread_fork_err;
   }
 
-  if (curproc->pid == child_proc->pid) { //if curproc is the child
+  if (child_proc == curproc) {
     *ret_val = 0;
   } else {
     *ret_val = child_proc->pid;

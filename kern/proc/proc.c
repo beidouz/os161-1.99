@@ -49,15 +49,16 @@
 #include <vnode.h>
 #include <vfs.h>
 #include <synch.h>
-#include <kern/fcntl.h>  
+#include <kern/fcntl.h>
+#include <kern/errno.h>
 
 
 // The process for the kernel; this holds all the kernel-only threads.
 struct proc *kproc;
 
 // The proc manager that contains array of all processes
-struct proc_manager pmanager;
-struct proc_manager * processes = &pmanager;
+struct proc_manager processes;
+struct proc_manager * pmanager = &processes;
 
 // The lock for processes
 struct lock * proc_lock;
@@ -69,10 +70,10 @@ struct lock * proc_lock;
 /* count of the number of processes, excluding kproc */
 static volatile unsigned int proc_count;
 /* provides mutual exclusion for proc_count */
-/* it would be better to use a lock here, but we use a semaphore because locks are not implemented in the base kernel */ 
+/* it would be better to use a lock here, but we use a semaphore because locks are not implemented in the base kernel */
 static struct semaphore *proc_count_mutex;
 /* used to signal the kernel menu thread when there are no processes */
-struct semaphore *no_proc_sem;   
+struct semaphore *no_proc_sem;
 #endif  // UW
 
 
@@ -127,10 +128,11 @@ proc_create(const char *name)
 int generate_pid(struct proc *proc) {
 	lock_acquire(proc_lock);
 
-	for (int i = processes->last_pid; i <= PID_MAX; ++i) {
-		if (processes->procs[i] == 0) { //if ith proc doesn't yet exist
+	for (int i = pmanager->last_pid + 1; i <= PID_MAX; ++i) {
+		if (pmanager->procs[i] == 0) { //if ith proc doesn't yet exist
 			proc->pid = i;
-			processes->procs[i] = proc;
+			pmanager->last_pid = i;
+			pmanager->procs[i] = proc;
 			lock_release(proc_lock);
 			return i;
 		}
@@ -138,7 +140,7 @@ int generate_pid(struct proc *proc) {
 			i = PID_MIN - 1;
 			continue;
 		}
-		if (i == processes->last_pid) {
+		if (i == pmanager->last_pid) {
 			lock_release(proc_lock);
 			return -1;
 		}
@@ -209,7 +211,7 @@ proc_destroy(struct proc *proc)
 	spinlock_cleanup(&proc->p_lock);
 
 	lock_acquire(proc_lock);
-	processes->procs[proc->pid] = NULL;  //mark the pid to available
+	pmanager->procs[proc->pid] = NULL;  //mark the pid to available
 	lock_release(proc_lock);
 
 	kfree(proc->p_name);
@@ -220,7 +222,7 @@ proc_destroy(struct proc *proc)
         /* note: kproc is not included in the process count, but proc_destroy
 	   is never called on kproc (see KASSERT above), so we're OK to decrement
 	   the proc_count unconditionally here */
-	P(proc_count_mutex); 
+	P(proc_count_mutex);
 	KASSERT(proc_count > 0);
 	proc_count--;
 	/* signal the kernel menu thread if the process count has reached zero */
@@ -253,16 +255,17 @@ proc_bootstrap(void)
   if (no_proc_sem == NULL) {
     panic("could not create no_proc_sem semaphore\n");
   }
-#endif // UW 
-
-  int processes_size = PID_MAX + 1;
-  for (int i = 0; i < processes_size; i++)
+  
+  processes.last_pid = PID_MIN - 1;
+  int pmanager_size = PID_MAX + 1;
+  for (int i = 0; i < pmanager_size; i++)
   {
-    processes->procs[i] = NULL;
+    pmanager->procs[i] = NULL;
   }
 
   proc_lock = lock_create("proc_lock");
   if (!(proc_lock)) panic("Process manager lock could not be created!\n");
+#endif // UW
 }
 
 /*
@@ -321,10 +324,18 @@ proc_create_runprogram(const char *name)
 	/* increment the count of processes */
         /* we are assuming that all procs, including those created by fork(),
            are created using a call to proc_create_runprogram  */
-	P(proc_count_mutex); 
+	P(proc_count_mutex);
 	proc_count++;
 	V(proc_count_mutex);
 #endif // UW
+
+  int temp_pid = generate_pid(proc);
+  if (temp_pid == -1) {
+    as_destroy(proc->p_addrspace);
+    proc_destroy(proc);
+    return (void *)ENPROC;
+  }
+  proc->pid = temp_pid;
 
 	return proc;
 }
@@ -389,7 +400,7 @@ curproc_getas(void)
 {
 	struct addrspace *as;
 #ifdef UW
-        /* Until user processes are created, threads used in testing 
+        /* Until user processes are created, threads used in testing
          * (i.e., kernel threads) have no process or address space.
          */
 	if (curproc == NULL) {
