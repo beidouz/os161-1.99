@@ -60,8 +60,8 @@ struct proc *kproc;
 struct proc_manager processes;
 struct proc_manager * pmanager = &processes;
 
-// The lock for processes
-struct lock * proc_lock;
+// The lock for pmanager
+struct lock * pmanager_lock;
 
 /*
  * Mechanism for making the kernel menu thread sleep while processes are running
@@ -126,14 +126,14 @@ proc_create(const char *name)
  * Assign a unique PID to a process
  */
 int generate_pid(struct proc *proc) {
-	lock_acquire(proc_lock);
+	lock_acquire(pmanager_lock);
 
 	for (int i = pmanager->last_pid + 1; i <= PID_MAX; ++i) {
 		if (pmanager->procs[i] == 0) { //if ith proc doesn't yet exist
 			proc->pid = i;
 			pmanager->last_pid = i;
 			pmanager->procs[i] = proc;
-			lock_release(proc_lock);
+			lock_release(pmanager_lock);
 			return i;
 		}
 		if (i == PID_MAX) {
@@ -141,11 +141,11 @@ int generate_pid(struct proc *proc) {
 			continue;
 		}
 		if (i == pmanager->last_pid) {
-			lock_release(proc_lock);
+			lock_release(pmanager_lock);
 			return -1;
 		}
 	}
-	lock_release(proc_lock);
+	lock_release(pmanager_lock);
 	return -1;
 }
 
@@ -210,9 +210,9 @@ proc_destroy(struct proc *proc)
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
-	lock_acquire(proc_lock);
+	lock_acquire(pmanager_lock);
 	pmanager->procs[proc->pid] = NULL;  //mark the pid to available
-	lock_release(proc_lock);
+	lock_release(pmanager_lock);
 
 	kfree(proc->p_name);
 	kfree(proc);
@@ -263,8 +263,8 @@ proc_bootstrap(void)
     pmanager->procs[i] = NULL;
   }
 
-  proc_lock = lock_create("proc_lock");
-  if (!(proc_lock)) panic("Process manager lock could not be created!\n");
+  pmanager_lock = lock_create("pmanager_lock");
+  if (!(pmanager_lock)) panic("Process manager lock could not be created!\n");
 #endif // UW
 }
 
