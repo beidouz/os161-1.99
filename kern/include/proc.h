@@ -38,7 +38,7 @@
 
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
-#include <array.h>
+#include <myarray.h>
 #include <limits.h>
 
 struct addrspace;
@@ -54,10 +54,13 @@ struct proc {
 	char *p_name;			/* Name of this process */
 
 	pid_t pid;
-	struct proc *parent; 
+	struct proc *parent;
 	int exitcode;             //if exited->exitcode; if running-> -1
-	struct array *children_pids;   //an array of children pids
-
+	struct myArray *children_pids;   //an array of children pids
+  
+  struct cv *proc_cv;        // parent proc waits on this CV
+  struct lock *proc_lock;   // lock for the proc_cv
+  
 	struct spinlock p_lock;		/* Lock for this structure */
 	struct threadarray p_threads;	/* Threads in this process */
 
@@ -91,7 +94,8 @@ struct proc {
 
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
-
+extern struct proc_manager *pmanager;
+extern struct lock *pmanager_lock;
 /* Semaphore used to signal when there are no more processes */
 #ifdef UW
 extern struct semaphore *no_proc_sem;

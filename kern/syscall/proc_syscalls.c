@@ -11,6 +11,9 @@
 #include <copyinout.h>
 #include <limits.h>
 #include <mips/trapframe.h>
+#include <synch.h>
+
+//using self define myarray for  children_pids, using a builtin C array for pmanager procs array!!!!!!
 
 
 static volatile pid_t pid_counter = PID_MIN;
@@ -19,16 +22,44 @@ static volatile pid_t pid_counter = PID_MIN;
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
 void sys__exit(int exitcode) {
-
+  // im a child -> if parent is dead, kill myself
+  //            -> if parent is not dead, delete everything else but keep pid,exitcode, parent and children
+  // im a parent -> if child is dead, kill the child
+  //             -> if child is not dead, tell him that im dying
+  
   struct addrspace *as;
   struct proc *p = curproc;
-  /* for now, just include this to keep the compiler from complaining about
-     an unused variable */
-  (void)exitcode;
-
+  p->exitcode = exitcode;
+  
+  
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
-
   KASSERT(curproc->p_addrspace != NULL);
+  
+  lock_acquire(pmanager_lock);
+  for (int i = 0; i < p->children_pids->len; ++i) {
+    int temp_pid = p->children_pids->arr[i];
+
+    //look up the child process in the pmanager array
+    struct proc * cur_child = pmanager->procs[temp_pid];
+    if (cur_child == NULL) {
+      //child is already dead, do nothing and continue
+      continue;
+    } else {
+      //if the child still exists, set parent reference to null cuz im killing myself
+      cur_child->parent = NULL;
+      if (cur_child->exitcode >= 0) {
+        //the child has exited, just kill it all
+        lock_release(pmanager_lock);   // release the pmanager_lock here because proc_destroy needs this lock
+        proc_destroy(cur_child);
+        lock_acquire(pmanager_lock);
+      }
+    }
+  }
+  lock_release(pmanager_lock);
+  //no longer need this array of child PIDs
+  myarray_delete(p->children_pids);
+  
+  
   as_deactivate();
   /*
    * clear p_addrspace before calling as_destroy. Otherwise if
@@ -44,14 +75,26 @@ void sys__exit(int exitcode) {
   /* note: curproc cannot be used after this call */
   proc_remthread(curthread);
 
+  threadarray_cleanup(&p->p_threads);
+  spinlock_cleanup(&p->p_lock);
+  
+  lock_acquire(p->proc_lock);
+  cv_broadcast(p->proc_cv, p->proc_lock);
+  lock_release(p->proc_lock);
+  
+  //if parent is dead, or parent has exited or parent is the kernel i'll just kill myself :)
+  if (!(p->parent) || p->parent->exitcode >= 0 || p->parent == kproc) {
+    proc_destroy(p);
+  }
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
-  proc_destroy(p);
+  //proc_destroy(p);
   
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
   panic("return from thread_exit in sys_exit\n");
 }
+
 
 
 /* stub handler for getpid() system call                */
@@ -65,16 +108,15 @@ sys_getpid(pid_t *ret_val)
   return 0;
 }
 
+
+
 /* stub handler for waitpid() system call                */
 
 int
-sys_waitpid(pid_t pid,
-	    userptr_t status,
-	    int options,
-	    pid_t *retval)
-{
-  int exitstatus;
-  int result;
+sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *ret_val) {
+  // int exitstatus;
+  // int result;
+  (void)status;
 
   /* this is just a stub implementation that always reports an
      exit status of 0, regardless of the actual exit status of
@@ -88,14 +130,36 @@ sys_waitpid(pid_t pid,
   if (options != 0) {
     return(EINVAL);
   }
-  /* for now, just pretend the exitstatus is 0 */
-  exitstatus = 0;
-  result = copyout((void *)&exitstatus,status,sizeof(int));
-  if (result) {
-    return(result);
+  
+  //check if the pid is valid -> between PID_MIN and PID_MAX
+  if (pid < PID_MIN || pid > PID_MAX) {
+   return ESRCH; //search error
   }
-  *retval = pid;
-  return(0);
+  //try to grab the child from the pmanager array using PID
+  struct proc * target_child = pmanager->procs[pid];
+  //check if the child retrieved is a valid child
+  if (!(target_child)) return ECHILD; //not a child
+  if (target_child->exitcode >= 0) {
+    //if the retrieved child has already exited
+    *ret_val = target_child->exitcode;
+    return 0;
+  }
+  
+  //when the child has not exited, we wait for it
+  lock_acquire(target_child->proc_lock);
+  cv_wait(target_child->proc_cv, target_child->proc_lock);
+  lock_release(target_child->proc_lock);
+  *ret_val = target_child->exitcode;
+  proc_destroy(target_child);
+  return 0;
+  // /* for now, just pretend the exitstatus is 0 */
+  // exitstatus = 0;
+  // result = copyout((void *)&exitstatus,status,sizeof(int));
+  // if (result) {
+  //   return(result);
+  // }
+  // *retval = pid;
+  // return(0);
 }
 
 
@@ -124,7 +188,7 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
 
   //CREATE the parent & child relationship
   child_proc->parent = curproc;
-  array_add(curproc->children_pids, &(child_proc->pid), NULL); //add child pid to array of all children pids
+  myarray_insert(curproc->children_pids, child_proc->pid);//add child pid to array of all children pids
 
   //CREATE trapframe
   struct trapframe *new_tf = kmalloc(sizeof(struct trapframe));

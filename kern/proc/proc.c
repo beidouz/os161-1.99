@@ -100,11 +100,13 @@ proc_create(const char *name)
 	proc->pid = -1;
 	proc->parent = NULL;
 	proc->exitcode = -1;
-	proc->children_pids = array_create();
+	proc->children_pids = myarray_create();
 	if (!(proc->children_pids)) {
 		kfree(proc);
 		return NULL;
 	}
+	proc->proc_lock = lock_create("proc_lock");
+	proc->proc_cv = cv_create("proc_cv");
 
 	threadarray_init(&proc->p_threads);
 	spinlock_init(&proc->p_lock);
@@ -129,11 +131,12 @@ int generate_pid(struct proc *proc) {
 	lock_acquire(pmanager_lock);
 
 	for (int i = pmanager->last_pid + 1; i <= PID_MAX; ++i) {
-		if (pmanager->procs[i] == 0) { //if ith proc doesn't yet exist
+		if (pmanager->procs[i] == NULL) { //if ith proc doesn't yet exist
 			proc->pid = i;
 			pmanager->last_pid = i;
 			pmanager->procs[i] = proc;
 			lock_release(pmanager_lock);
+			//kprintf("im printing i inside of generate_pid:  %d\n", i);
 			return i;
 		}
 		if (i == PID_MAX) {
@@ -156,6 +159,7 @@ int generate_pid(struct proc *proc) {
 void
 proc_destroy(struct proc *proc)
 {
+  //kprintf("Im ruining your shit\n");
 	/*
          * note: some parts of the process structure, such as the address space,
          *  are destroyed in sys_exit, before we get here
@@ -213,9 +217,11 @@ proc_destroy(struct proc *proc)
 	lock_acquire(pmanager_lock);
 	pmanager->procs[proc->pid] = NULL;  //mark the pid to available
 	lock_release(pmanager_lock);
-
+  lock_destroy(proc->proc_lock);
+  cv_destroy(proc->proc_cv);
 	kfree(proc->p_name);
 	kfree(proc);
+	
 
 #ifdef UW
 	/* decrement the process count */
