@@ -12,6 +12,8 @@
 #include <limits.h>
 #include <mips/trapframe.h>
 #include <synch.h>
+#include <vfs.h>
+#include <kern/fcntl.h>
 
 //using self define myarray for  children_pids, using a builtin C array for pmanager procs array!!!!!!
 
@@ -218,3 +220,133 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
   return 0;
 }
 
+
+
+
+
+int sys_execv(const char *progname, userptr_t args2) {
+  
+	struct addrspace *new_as;
+	struct addrspace *old_as = curproc_getas();
+	int result;
+  char **args = (char **)args2;
+
+  //count the number of arguments
+  int arg_count = 0;
+  while(args[arg_count] != NULL) {
+    if (strlen(args[arg_count]) > 1024) {
+      return E2BIG;
+    }
+    arg_count++;
+  }
+  if (arg_count > 32) {
+    return E2BIG;
+  }
+
+  //copy the arguments into the kernel
+  char **kern_args = kmalloc((arg_count + 1) * sizeof(char *)); // malloc space for kernel args
+  if (!kern_args) return ENOMEM;
+  
+  for (int i = 0; i < arg_count; ++i) {
+    size_t arg_len = strlen(args[i]) + 1;
+    kern_args[i] = kmalloc(sizeof(char *) * arg_len);
+    if (!kern_args[i]) {
+      for (int j = 0; j < i; ++j) {
+        kfree(kern_args[j]);
+      }
+      kfree(kern_args);
+      return ENOMEM;
+    }
+    //kprintf("target: %s\n", args[i]);
+    
+    result = copyinstr((userptr_t)args[i], kern_args[i], arg_len, NULL);
+    if (result) {
+      for (int j = 0; j < i; ++j) {
+        kfree(kern_args[j]);
+      }
+      kfree(kern_args);
+      return result;
+    }
+  }
+  kern_args[arg_count] = NULL;
+  
+  // kprintf("I'm printing the array of args snake a\n");
+  // for (int x = 0; x < arg_count; ++x) {
+  //   kprintf("I'm printing the length of the args %d\n", strlen(kern_args[x]));
+  //   kprintf("I'm printing the actual arg: %s; \n", kern_args[x]);
+  // }
+  
+  
+// Copy the program path into the kernel (program path is the parameter "program"
+
+	// allocate space for program_path
+	char *new_prog = kmalloc((strlen(progname) + 1) * sizeof(char));
+	if (!new_prog) {
+	   //freeArgv(argv, argcount )  --> after args is implemented
+	   //kfree(argv)
+	   return ENOMEM;
+ 	}
+
+	//copy the program path into the allocated kernel space
+	result = copyinstr((const_userptr_t)progname, new_prog, strlen(progname) + 1, NULL);
+	if (result) {
+	  //if there is an error
+	  //free....
+	  //free...
+	  //fre...
+	  return result;
+	}
+	
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	//int result;
+
+	/* Open the file. */
+	result = vfs_open(new_prog, O_RDONLY, 0, &v);
+	if (result) {
+		return result;
+	}
+
+	/* We should be a new process. */
+	//KASSERT(curproc_getas() == NULL);
+	/* Create a new address space. */
+	new_as = as_create();
+	if (new_as ==NULL) {
+		vfs_close(v);
+		return ENOMEM;
+	}
+
+	/* Switch to the new address space and activate it. */
+  // already made a backup of the old address_space at the begining of the function, when fail, set it back
+	curproc_setas(new_as);
+	as_activate();
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		vfs_close(v);
+		return result;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	/* Define the user stack in the address space */
+	result = as_define_stack(new_as, &stackptr);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		return result;
+	}
+  
+  as_destroy(old_as);
+  kfree(new_prog);
+  
+	/* Warp to user mode. */
+	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+			  stackptr, entrypoint);
+	
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	return EINVAL;
+}
