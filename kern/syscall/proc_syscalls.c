@@ -29,7 +29,7 @@ void sys__exit(int exitcode) {
   
   struct addrspace *as;
   struct proc *p = curproc;
-  p->exitcode = exitcode;
+  p->exitcode = _MKWAIT_EXIT(exitcode);
   
   
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
@@ -114,8 +114,8 @@ sys_getpid(pid_t *ret_val)
 
 int
 sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *ret_val) {
-  // int exitstatus;
-  // int result;
+  int exitstatus;
+  int result;
   (void)status;
 
   /* this is just a stub implementation that always reports an
@@ -139,25 +139,26 @@ sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *ret_val) {
   struct proc * target_child = pmanager->procs[pid];
   //check if the child retrieved is a valid child
   if (!(target_child)) return ECHILD; //not a child
-  if (target_child->exitcode >= 0) {
-    //if the retrieved child has already exited
-    *ret_val = target_child->exitcode;
-    return 0;
+  if (target_child->exitcode < 0) {
+    //if the retrieved child has not exited, we wait for it
+    lock_acquire(target_child->proc_lock);
+    cv_wait(target_child->proc_cv, target_child->proc_lock);
+    lock_release(target_child->proc_lock);
   }
   
-  //when the child has not exited, we wait for it
-  lock_acquire(target_child->proc_lock);
-  cv_wait(target_child->proc_cv, target_child->proc_lock);
-  lock_release(target_child->proc_lock);
+  exitstatus = target_child->exitcode;
   *ret_val = target_child->exitcode;
+  result = copyout((void *)&exitstatus, status, sizeof(int));
+  
+  if (result) {
+    return(result);
+  }
   proc_destroy(target_child);
   return 0;
   // /* for now, just pretend the exitstatus is 0 */
   // exitstatus = 0;
   // result = copyout((void *)&exitstatus,status,sizeof(int));
-  // if (result) {
-  //   return(result);
-  // }
+  
   // *retval = pid;
   // return(0);
 }
