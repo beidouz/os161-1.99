@@ -223,14 +223,111 @@ int sys_fork(struct trapframe *tf, pid_t *ret_val) {
 
 
 
+static void free_args(char **args, int len) {
+  for (int i = 0; i <= len; ++i) {
+    kfree(args[i]);
+  }
+}
 
+
+int copyin_args(int arg_count, char ** kern_args, userptr_t *user_args, vaddr_t *stack_ptr) {
+  //idea: write a loop that puts all the args(the strings themselves) onto the user stack at index x
+  //      and at the same time, at each step after placing the arg onto the stack, we get the pointer
+  //      that points to the arg on the stack and place the ptr on user stack at index (x+ size of all arg strings)
+  //      size of all arg strings will be calculated at the beginning using a loop (which is shit but idgf)
+  //      note: everything is in reverse order
+  
+  // //////////////
+  // int result = 0;
+  // vaddr_t stack = *stack_ptr;
+  // vaddr_t split_location = stack;
+  // char ** string_locations = kmalloc(arg_count * sizeof(char *));
+  // for (int i = 0; i < arg_count; ++i) {
+  //   split_location -= ROUNDUP(strlen(*(kern_args+i)) + 1, 8);
+  //   result = copyoutstr(*(kern_args + arg_count - i - 1), (userptr_t)split_location, strlen(*(kern_args+i)) + 1, NULL);
+  //   if (result) {
+  //     kfree(string_locations);
+  //     return result;
+  //   }
+    
+  //   string_locations[i] = (char *)split_location;
+  // }
+  // //split_location -= sizeof(void *);
+  
+  // *(string_locations + arg_count) = NULL;
+  // //set NULL
+  // //copyout(NULL, (userptr_t)split_location, sizeof(void *));
+  
+  // for (int i = arg_count - 1; i > -1; --i) {
+  //   int temp_len = strlen(kern_args[i]) + 1;
+  //   //copyoutstr(kern_args[i], (userptr_t)(stack - ROUNDUP(temp_len, 8)), temp_len, NULL);
+  //   split_location -= sizeof(void *);
+  //   kprintf("shit %p\n", *(string_locations+i));
+  //   result = copyout(string_locations + i, (userptr_t)split_location, sizeof(char *));
+  //   if (result) {
+  //     kfree(string_locations);
+  //     return result;
+  //   }
+  //   stack -= ROUNDUP(temp_len, 8);
+  // }
+  // stack = split_location;
+  // *user_args = (userptr_t)stack; //modify user_args to contain the actual cur stackptr
+  // if (stack % 8 == 0) stack -= 8;
+  // else stack -= 4;  //idk wtf this is, but its on hint page
+  // //kprintf("shit: %p\n", user_args);
+  // *stack_ptr = stack;  //update the stack ptr
+  // kfree(string_locations);
+  // kprintf("getting here %d\n", result);
+  // return result;
+  // ////////////////
+  
+  
+  // THE above implementation is having weird memory errors too hard to debug.....
+  // trying 2nd approach:
+  //                have one for loop that adds the strings onto the stack in reverse order, at the same time
+  //                store each corresponding address into an array. Add a NULL after adding all the strings onto
+  //                the stack. Then have a second for loop that adds the array of addresses onto the stack.
+  int result = 0;
+  vaddr_t user_stack = *stack_ptr;
+  char ** string_locations = kmalloc((arg_count + 1) * sizeof(char *));
+  
+  *(string_locations + arg_count) = NULL;  //in between all strinngs and all addresses
+  
+  for (int i = arg_count-1; i > -1; --i) {
+    int arg_len = strlen(*(kern_args + (arg_count - i -1))) + 1;
+    user_stack -= ROUNDUP(arg_len, 8);
+    result = copyoutstr(*(kern_args + (arg_count - i - 1)), (userptr_t)user_stack, arg_len, NULL);
+    if (result) {
+      kfree(string_locations);
+      return result;
+    }
+    *(string_locations + (arg_count - i -1)) = (char *)user_stack;
+  }
+  
+  for (int j = arg_count; j > -1; --j) {
+    user_stack -= sizeof(char *);
+    result = copyout(string_locations + j, (userptr_t)user_stack, sizeof(char *));
+    if (result) {
+      kfree(string_locations);
+      return result;
+    }
+  }
+  
+  *stack_ptr = user_stack;
+  *user_args = (userptr_t)user_stack;   // this is the argv parameter
+  kfree(string_locations);
+  
+  return result;
+}
+  
+    
 int sys_execv(const char *progname, userptr_t args2) {
   
 	struct addrspace *new_as;
 	struct addrspace *old_as = curproc_getas();
 	int result;
   char **args = (char **)args2;
-
+  
   //count the number of arguments
   int arg_count = 0;
   while(args[arg_count] != NULL) {
@@ -251,9 +348,7 @@ int sys_execv(const char *progname, userptr_t args2) {
     size_t arg_len = strlen(args[i]) + 1;
     kern_args[i] = kmalloc(sizeof(char *) * arg_len);
     if (!kern_args[i]) {
-      for (int j = 0; j < i; ++j) {
-        kfree(kern_args[j]);
-      }
+      free_args(kern_args, i);
       kfree(kern_args);
       return ENOMEM;
     }
@@ -261,9 +356,7 @@ int sys_execv(const char *progname, userptr_t args2) {
     
     result = copyinstr((userptr_t)args[i], kern_args[i], arg_len, NULL);
     if (result) {
-      for (int j = 0; j < i; ++j) {
-        kfree(kern_args[j]);
-      }
+      free_args(kern_args, i);
       kfree(kern_args);
       return result;
     }
@@ -282,8 +375,8 @@ int sys_execv(const char *progname, userptr_t args2) {
 	// allocate space for program_path
 	char *new_prog = kmalloc((strlen(progname) + 1) * sizeof(char));
 	if (!new_prog) {
-	   //freeArgv(argv, argcount )  --> after args is implemented
-	   //kfree(argv)
+	   free_args(kern_args, arg_count - 1);
+	   kfree(kern_args);
 	   return ENOMEM;
  	}
 
@@ -291,19 +384,22 @@ int sys_execv(const char *progname, userptr_t args2) {
 	result = copyinstr((const_userptr_t)progname, new_prog, strlen(progname) + 1, NULL);
 	if (result) {
 	  //if there is an error
-	  //free....
-	  //free...
-	  //fre...
+	  free_args(kern_args, arg_count - 1);
+	  kfree(kern_args);
+	  kfree(new_prog);
 	  return result;
 	}
 	
 	struct vnode *v;
-	vaddr_t entrypoint, stackptr;
+	vaddr_t entrypoint;
 	//int result;
 
 	/* Open the file. */
 	result = vfs_open(new_prog, O_RDONLY, 0, &v);
 	if (result) {
+	  free_args(kern_args, arg_count - 1);
+	  kfree(kern_args);
+	  kfree(new_prog);
 		return result;
 	}
 
@@ -311,8 +407,11 @@ int sys_execv(const char *progname, userptr_t args2) {
 	//KASSERT(curproc_getas() == NULL);
 	/* Create a new address space. */
 	new_as = as_create();
-	if (new_as ==NULL) {
+	if (new_as == NULL) {
 		vfs_close(v);
+		free_args(kern_args, arg_count - 1);
+	  kfree(kern_args);
+	  kfree(new_prog);
 		return ENOMEM;
 	}
 
@@ -326,26 +425,51 @@ int sys_execv(const char *progname, userptr_t args2) {
 	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
 		vfs_close(v);
+		free_args(kern_args, arg_count - 1);
+	  kfree(kern_args);
+	  kfree(new_prog);
 		return result;
 	}
 
 	/* Done with the file now. */
 	vfs_close(v);
 
-	/* Define the user stack in the address space */
-	result = as_define_stack(new_as, &stackptr);
+
+	/* Define the user STACK in the address space */
+	vaddr_t user_stack;
+	result = as_define_stack(new_as, &user_stack);   //this puts the newly defined user stack into the user address space
 	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
+		free_args(kern_args, arg_count - 1);
+	  kfree(kern_args);
+	  kfree(new_prog);
 		return result;
 	}
   
+  //copy the arguments into the new address space -> copy the args onto the user stack
+  userptr_t user_args;  // trying to give the args to user
+  result = copyin_args(arg_count, kern_args, &user_args, &user_stack);
+                                                                       //arg_count is the number of args trying to give to user   (this 	kprintf("printing user_args: %p\n", user_args); will be argc)
+                                                                       //kern_args is an array of pointers pointing to strings(args) that are on the kernel heap
+                                                                       //user_args will be an array of(pointer) pointers pointing to strings(args) that are on the user stack (this will be argv)
+                                                                       //user_stack is a pointer pointing to the top of the user_stack
+  //kprintf("my life is a lie: %d\n", result);
+  if (result) {
+    free_args(kern_args, arg_count - 1);
+	  kfree(kern_args);
+	  kfree(new_prog);
+	  curproc_setas(old_as);//if failed -> need to set the current process to the old one
+	  as_destroy(new_as);
+		return result;
+  }
+  //destroy the stuff at the end
   as_destroy(old_as);
   kfree(new_prog);
-  
+  free_args(kern_args, arg_count - 1);
+  kfree(kern_args);
 	/* Warp to user mode. */
-	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-			  stackptr, entrypoint);
-	
+	enter_new_process(arg_count, user_args, user_stack, entrypoint);
+
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");
 	return EINVAL;
