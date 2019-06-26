@@ -64,6 +64,9 @@ void sys__exit(int exitcode);
 int sys_getpid(pid_t *ret_val);
 int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *ret_val);
 int sys_fork(struct trapframe *tf, pid_t *ret_val);
+int sys_execv(const char *progname, userptr_t args);
+int copyin_args(int arg_count, char ** kern_args, userptr_t *user_args, vaddr_t *stack_ptr);
+
 
 #endif // UW
 

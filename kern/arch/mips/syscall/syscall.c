@@ -93,7 +93,7 @@ syscall(struct trapframe *tf)
 	 * really return a value, just 0 for success and -1 on
 	 * error. Since retval is the value returned on success,
 	 * initialize it to 0 by default; thus it's not necessary to
-	 * deal with it except for calls that return other values, 
+	 * deal with it except for calls that return other values,
 	 * like write.
 	 */
 
@@ -131,6 +131,9 @@ syscall(struct trapframe *tf)
 	  break;
 	case SYS_fork:
 	  err = sys_fork(tf, (pid_t *)&retval);
+	  break;
+	case SYS_execv:
+	  err = sys_execv((const char *)tf->tf_a0, (userptr_t)tf->tf_a1);
 	  break;
 #endif // UW
 

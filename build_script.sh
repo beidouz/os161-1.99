@@ -1,10 +1,13 @@
 #!/bin/bash
 set -eu
-topdir=$(pwd)
+topdir=`pwd`
+buildir='~/cs350-os161/os161-1.99'
+eval cd $buildir
 cd ./kern/compile/ASST$1
 bmake depend
 bmake
 bmake install
-cd $topdir
+eval cd $buildir
 bmake
 bmake install
+cd $topdir
